@@ -1,3 +1,8 @@
+--Original Concept & Written by John 'Joker' Martini
+--https://www.jokermartini.com/
+--Additional Code by Dave 'Max Made Easy' Wortley
+--https://davewortley.wordpress.com/
+
 taggerCA= attributes assetTags
 (	
 	parameters main rollout:params
@@ -9,7 +14,7 @@ taggerCA= attributes assetTags
 		on Tags tabChanged change tabIndex tabCount do 
 		(
 			this.params.updateUi ui:#Tags --I always use this, because I can fire 1 central function from many event handler
-			print Tags.count
+			--print Tags.count
 		)
 	)
 	 
@@ -121,10 +126,13 @@ taggerCA= attributes assetTags
 -- scene setup
 fn AddTagsCA =
 (
-	for x in objects do
+	for x in selection do
 	(
-		custAttributes.add x taggerCA
-		x.assetTags.BaseNode = (nodeTransformMonitor node:x forwardTransformChangeMsgs:false)
+		if not isproperty x #Tags do
+		(
+			custAttributes.add x taggerCA
+			x.assetTags.BaseNode = (nodeTransformMonitor node:x forwardTransformChangeMsgs:false)
+		)
 	)
 )
 
@@ -138,13 +146,17 @@ fn AddTagsCA =
 -- 	sphere pos:p radius:r wirecolor:w
 -- 	cylinder pos:[p[1], p[2], 0] wirecolor:w radius:r
 -- )
-AddTagsCA()
+----Don't turn tags on unless we want to
+--AddTagsCA()
 -- select objects[1]
 
 
 
 -- panel
-try(destroyDialog ::TagsToolRO)catch()
+try(
+	cui.UnRegisterDialogBar ::TagsToolRO
+	destroyDialog ::TagsToolRO
+)catch()
 rollout TagsToolRO "Tags Tool"
 (
 	local validCharacters = #("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "_")
@@ -153,17 +165,19 @@ rollout TagsToolRO "Tags Tool"
 	local tagDataCollection = #()
 	local bufferCopy = #()
 
-	group "Tag Toolbox:"
-	(
-		edittext uiTagInput "Add Tag: " width:190
-		button uiSelect "Select" width:45 across:4 align:#left
-		button uiRemove "Remove" width:45 align:#left tooltip:"Remove tags highlighted in the list"
-		button uiCopy "Copy" width:45 align:#left tooltip:"Copy Tags of selected nodes"
-		button uiPaste "Paste" width:45 align:#left tooltip:"Paste Tags onto selected Nodes\n\nPaste: "
-	)
-	dropdownlist uiTagDisplay items:#("Selected","Scene") width:210 pos:[5,90]
-	dotNetControl uiTagList "listview" width:210 height:400 pos:[5,120]
-
+	button uiaddCAtoSelected "Add Tag UI to Sel. Objects" width:200 offset:[-5,0] tooltip:"Add an empty Tag UI Custom Attribute to the base-object of the selected objects. Open the modifier panel to see the UI."
+	--group "Add Tag to Selected Objects:"
+	label lbl_tag "Add Tag to Selected Objects:" align:#left offset:[-3,0]
+	edittext uiTagInput "" width:200 align:#left offset:[-9,0]
+	
+	dotNetControl uiTagList "listview" width:200 height:400 offset:[-5,0]
+	dropdownlist uiTagDisplay items:#("Selected","Scene") width:200 offset:[-5,0]
+	
+	button uiSelect "Select" width:45 across:5 align:#left offset:[-9,0] tooltip:"Select all the objects in the scene with the above selected tags"
+	button uiRemove "Remove" width:45 align:#left tooltip:"Remove tags highlighted in the list" offset:[0,0]
+	button uiCopy "Copy" width:45 align:#left tooltip:"Copy Tags of selected nodes" offset:[9,0]
+	button uiPaste "Paste" width:45 align:#left tooltip:"Paste Tags onto selected Nodes" offset:[18,0]
+	button uiDock "D" width:16 offset:[15,0] tooltip:"Dock Left / Undock Dialog"
 	/* Functions */
 	fn CompareNames str1 str2 = stricmp str1.name str2.name
 
@@ -196,6 +210,9 @@ rollout TagsToolRO "Tags Tool"
 		local str = RemoveInvalidCharacters txt:txt
 		if str != "" AND str != " " do
 		(
+			--if we haven't got tags on these objects, then add them
+			AddTagsCA()
+			
 			for o in selection where isProperty o #Tags do
 			(
 				appendIfUnique o.Tags str
@@ -205,8 +222,8 @@ rollout TagsToolRO "Tags Tool"
 
 	fn StyleListView ctrl:unsupplied =
 	(
-		ctrl.columns.add "Tags" 150
-		ctrl.columns.add "#" 40
+		ctrl.columns.add "Tags" 145
+		ctrl.columns.add "#" 34
 		ctrl.view = ctrl.View.details
 		ctrl.HideSelection = false
 		ctrl.FullRowSelect = true
@@ -274,6 +291,11 @@ rollout TagsToolRO "Tags Tool"
 		--format "time:% memory:%\n" (timestamp() - t1) (m1 - heapfree)
 	)
 
+	fn AddCAtoSelected =
+	(
+		AddTagsCA()
+	)
+	
 	fn GetSelectedIndices ctrl: =
 	(
 		local indices = #()
@@ -346,15 +368,33 @@ rollout TagsToolRO "Tags Tool"
 
 	fn PasteBuffer =
 	(
+		AddTagsCA()
+		
 		for o in selection where isProperty o #Tags do
 		(
 			for b in bufferCopy do appendIfUnique o.tags b
 		)
 		PopulateUI()
 	)
-
-
+	fn dockUnDock =
+	(
+		if cui.getDockState TagsToolRO == #cui_floatable then
+		(
+			cui.DockDialogBar TagsToolRO #cui_dock_left
+		)
+		else
+		(
+			cui.FloatDialogBar TagsToolRO
+		)
+	)
+	
+	
 	/* Button Actions */
+	on uiAddCAtoSelected pressed do
+	(
+		AddCAtoSelected()
+	)
+	
 	on uiSelect pressed do
 	(
  		local indices = GetSelectedIndices ctrl:uiTagList
@@ -376,8 +416,11 @@ rollout TagsToolRO "Tags Tool"
 	(
 		CopyToBuffer()
 	)
-
-	on uiTagInput changed txt do
+	on uiDock pressed do
+	(
+		dockUnDock()
+	)
+	on uiTagInput changed txt do 
 	(
 		str = RemoveInvalidCharacters txt:txt
 		uiTagInput.text = str
@@ -421,6 +464,22 @@ rollout TagsToolRO "Tags Tool"
 		callbackContainer = undefined
 		gc()
 	)
+	
+	on TagsToolRO resized arg do
+	(
+		--TagsToolRO.width = 220
+		uiTagList.height = arg[2] - 130
+		uiTagDisplay.pos = [uiTagDisplay.pos[1], arg[2] - 54]
+		
+		
+		uiSelect.pos = [uiselect.pos[1], arg[2] - 26]
+		uiRemove.pos = [uiRemove.pos[1], arg[2] - 26]
+		uiCopy.pos = [uiCopy.pos[1], arg[2] - 26]
+		uiPaste.pos = [uiPaste.pos[1], arg[2] - 26]
+		uiDock.pos = [uiDock.pos[1], arg[2] - 26]
+	)
 
 )
-createDialog TagsToolRO width:220
+createDialog TagsToolRO width:225 height:536 style:#(#style_titlebar, #style_border, #style_sysmenu, #style_minimizebox, #style_resizing)
+
+cui.RegisterDialogBar TagsToolRO minSize:[220,180] maxSize:[220,1000] style:#(#cui_dock_left, #cui_floatable, #cui_dock_right, #cui_handles) --, #cui_max_sized
